@@ -48,7 +48,8 @@ class Store {
   async getAllSettings() {
     const keys = [
       'masterProfile', 'subreddits', 'dmPrompt', 'commentPrompt', 
-      'geminiKey', 'geminiModel', 'telegramToken', 'telegramChatId', 'useTelegram'
+      'geminiKey', 'geminiModel', 'telegramToken', 'telegramChatId', 'useTelegram',
+      'runStartHour', 'runEndHour'
     ];
     const settings = {};
     for (const key of keys) {

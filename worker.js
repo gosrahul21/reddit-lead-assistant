@@ -6,6 +6,7 @@ const cors = require('cors');
 const Store = require('./store');
 const { runScrapeCycle, forceGeneratePitch } = require('./scraper');
 const TelegramBot = require('./telegram');
+const config = require('./config');
 
 // Load environment variables
 dotenv.config();
@@ -18,6 +19,8 @@ const store = new Store({
     geminiModel: 'gemini-3.1-flash-lite',
     telegramToken: process.env.BOT_TOKEN || '',
     telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
+    runStartHour: 9,
+    runEndHour: 3,
     masterProfile: `Name: Rahul Goswami
 Role: Senior Software Engineer & Tech Lead
 Tech Stack: React, Node.js, Next.js, TypeScript, NestJS, PostgreSQL.
@@ -47,6 +50,31 @@ async function runScraperCycleSafe() {
     console.log(`[${new Date().toLocaleTimeString()}] Skipping scrape cycle: previous cycle is still running.`);
     return;
   }
+  
+  const settings = await store.getAllSettings();
+  const currentHour = new Date().getHours();
+  
+  // Active Window logic: Check if current hour is within the allowed run window
+  let isActive = false;
+  const startH = Number(settings.runStartHour);
+  const endH = Number(settings.runEndHour);
+  
+  if (startH === endH) {
+    // If they are the same, assume it runs 24/7
+    isActive = true;
+  } else if (startH < endH) {
+    // Normal window e.g., 9 to 17 (9 AM to 4:59 PM)
+    if (currentHour >= startH && currentHour < endH) isActive = true;
+  } else if (startH > endH) {
+    // Wrap around midnight e.g., 9 to 3 (9 AM to 2:59 AM)
+    if (currentHour >= startH || currentHour < endH) isActive = true;
+  }
+  
+  if (!isActive) {
+    console.log(`[IDLE MODE] Current hour (${currentHour}:00) is OUTSIDE the configured run window (${startH}:00 - ${endH}:00). Skipping scrape.`);
+    return;
+  }
+  
   isCycleActive = true;
 
   console.log(`[${new Date().toLocaleTimeString()}] Starting scrape cycle...`);
@@ -103,8 +131,12 @@ async function runScraperCycleSafe() {
 // Fire an initial execution immediately on launch
 runScraperCycleSafe();
 
-cron.schedule('*/15 * * * *', () => {
-  runScraperCycleSafe();
+cron.schedule(config.SCRAPE_CRON_SCHEDULE, () => {
+  const randomDelayMs = Math.floor(Math.random() * config.MAX_CRON_DELAY_MS);
+  console.log(`[CRON] Scheduled cycle triggered. Delaying start by ${Math.round(randomDelayMs / 1000)} seconds to randomize timing...`);
+  setTimeout(() => {
+    runScraperCycleSafe();
+  }, randomDelayMs);
 });
 
 // --------------------------------------------------------------------
@@ -130,7 +162,8 @@ app.get('/api/settings', async (req, res) => {
 app.post('/api/settings', async (req, res) => {
   const keys = [
     'masterProfile', 'subreddits', 'dmPrompt', 'commentPrompt', 
-    'geminiKey', 'geminiModel', 'telegramToken', 'telegramChatId', 'useTelegram'
+    'geminiKey', 'geminiModel', 'telegramToken', 'telegramChatId', 'useTelegram',
+    'runStartHour', 'runEndHour'
   ];
   for (const k of keys) {
     if (req.body[k] !== undefined) {

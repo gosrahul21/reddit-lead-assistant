@@ -2,6 +2,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const puppeteer = require('puppeteer-core');
 const fs = require('fs');
 const path = require('path');
+const config = require('./config');
 
 function appendToLogFile(msg) {
   try {
@@ -71,10 +72,10 @@ async function fetchSubredditNewPosts(subreddit) {
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
     // Load the HTML subreddit landing page first to pass WAF/Cloudflare and establish session cookies
-    await page.goto(`https://www.reddit.com/r/${subreddit}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await page.goto(`https://www.reddit.com/r/${subreddit}`, { waitUntil: 'domcontentloaded', timeout: config.PAGE_LOAD_TIMEOUT_MS });
 
     // Wait a short duration for WAF cookies to stabilize
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, config.WAF_STABILIZATION_DELAY_MS));
 
     // Fetch the public JSON endpoint from the console context of this page to bypass security blocks
     const children = await page.evaluate(async (sub) => {
@@ -198,15 +199,15 @@ async function runScrapeCycle(settings, store, onMatchFound, onMatchRejected, on
 
       // Throttle: Max 1 request per minute to Gemini API
       if (settings.geminiKey) {
-        onLog(`Throttling Gemini API: Waiting 60 seconds before processing next potential lead...`);
-        await new Promise(resolve => setTimeout(resolve, 60000));
+        onLog(`Throttling Gemini API: Waiting ${config.DELAY_BETWEEN_POST_EVALUATIONS_MS / 1000} seconds before processing next potential lead...`);
+        await new Promise(resolve => setTimeout(resolve, config.DELAY_BETWEEN_POST_EVALUATIONS_MS));
       }
     }
 
-    // Delay 2 minutes between subreddits (unless it's the last one)
+    // Delay between subreddits (unless it's the last one)
     if (i < subs.length - 1) {
-      onLog(`Waiting 2 minutes before scraping the next subreddit...`, 'info');
-      await new Promise(resolve => setTimeout(resolve, 120000)); // 2 minutes delay is 120000ms
+      onLog(`Waiting ${config.DELAY_BETWEEN_SUBREDDITS_MS / 1000} seconds before scraping the next subreddit...`, 'info');
+      await new Promise(resolve => setTimeout(resolve, config.DELAY_BETWEEN_SUBREDDITS_MS)); 
     }
   }
 }
