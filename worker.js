@@ -50,15 +50,15 @@ async function runScraperCycleSafe() {
     console.log(`[${new Date().toLocaleTimeString()}] Skipping scrape cycle: previous cycle is still running.`);
     return;
   }
-  
+
   const settings = await store.getAllSettings();
   const currentHour = new Date().getHours();
-  
+
   // Active Window logic: Check if current hour is within the allowed run window
   let isActive = false;
   const startH = Number(settings.runStartHour);
   const endH = Number(settings.runEndHour);
-  
+
   if (startH === endH) {
     // If they are the same, assume it runs 24/7
     isActive = true;
@@ -69,12 +69,12 @@ async function runScraperCycleSafe() {
     // Wrap around midnight e.g., 9 to 3 (9 AM to 2:59 AM)
     if (currentHour >= startH || currentHour < endH) isActive = true;
   }
-  
+
   if (!isActive) {
     console.log(`[IDLE MODE] Current hour (${currentHour}:00) is OUTSIDE the configured run window (${startH}:00 - ${endH}:00). Skipping scrape.`);
     return;
   }
-  
+
   isCycleActive = true;
 
   console.log(`[${new Date().toLocaleTimeString()}] Starting scrape cycle...`);
@@ -94,7 +94,7 @@ async function runScraperCycleSafe() {
       store,
       async (post, decisionObj) => {
         console.log(`[MATCH] Found lead: r/${post.subreddit} - "${post.title}" by u/${post.author}`);
-        
+
         const pitch = typeof decisionObj === 'object' ? decisionObj.dmMessage : decisionObj;
         const replyMessage = typeof decisionObj === 'object' ? decisionObj.replyMessage : settings.commentPrompt;
 
@@ -146,6 +146,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get("/health", async (req, res) => {
+  res.send({
+    success: true,
+    status: "OK"
+  });
+});
+
 app.get('/api/posts', async (req, res) => {
   res.json({
     all: await store.get('allPosts', []),
@@ -161,7 +168,7 @@ app.get('/api/settings', async (req, res) => {
 
 app.post('/api/settings', async (req, res) => {
   const keys = [
-    'masterProfile', 'subreddits', 'dmPrompt', 'commentPrompt', 
+    'masterProfile', 'subreddits', 'dmPrompt', 'commentPrompt',
     'geminiKey', 'geminiModel', 'telegramToken', 'telegramChatId', 'useTelegram',
     'runStartHour', 'runEndHour'
   ];
