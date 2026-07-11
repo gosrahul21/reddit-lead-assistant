@@ -32,40 +32,15 @@ async function saveProcessedIds(store, idSet) {
   await store.pruneProcessedIds(key);
 }
 
-function findChromePath() {
-  const paths = [
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-    '/usr/bin/google-chrome',
-    '/usr/bin/microsoft-edge',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser'
-  ];
 
-  for (const p of paths) {
-    if (fs.existsSync(p)) {
-      return p;
-    }
-  }
-  return null;
-}
 
 async function fetchSubredditNewPosts(subreddit) {
-  const chromePath = findChromePath();
-  
   let browser;
   try {
     const launchOptions = {
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     };
-    if (chromePath) {
-      launchOptions.executablePath = chromePath;
-    }
     
     browser = await puppeteer.launch(launchOptions);
 
