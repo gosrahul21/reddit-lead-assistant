@@ -1,5 +1,5 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
@@ -56,17 +56,18 @@ function findChromePath() {
 
 async function fetchSubredditNewPosts(subreddit) {
   const chromePath = findChromePath();
-  if (!chromePath) {
-    return { success: false, error: 'No Google Chrome or Microsoft Edge executable found on the system.', data: [] };
-  }
-
+  
   let browser;
   try {
-    browser = await puppeteer.launch({
-      executablePath: chromePath,
+    const launchOptions = {
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    };
+    if (chromePath) {
+      launchOptions.executablePath = chromePath;
+    }
+    
+    browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
