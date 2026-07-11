@@ -6,9 +6,9 @@ const config = require('./config');
 
 function appendToLogFile(msg) {
   try {
-    const logPath = path.join(__dirname, 'posts.log');
-    const timestamp = new Date().toISOString();
-    fs.appendFileSync(logPath, `[${timestamp}] ${msg}\n`);
+    // const logPath = path.join(__dirname, 'posts.log');
+    // const timestamp = new Date().toISOString();
+    // fs.appendFileSync(logPath, `[${timestamp}] ${msg}\n`);
   } catch (e) {
     console.error('Failed to write to log file:', e);
   }
