@@ -1,0 +1,250 @@
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const puppeteer = require('puppeteer-core');
+const fs = require('fs');
+const path = require('path');
+
+function appendToLogFile(msg) {
+  try {
+    const logPath = path.join(__dirname, 'posts.log');
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(logPath, `[${timestamp}] ${msg}\n`);
+  } catch (e) {
+    console.error('Failed to write to log file:', e);
+  }
+}
+
+// ── Persistent processed-ID cache ────────────────────────────────────────────
+// IDs are keyed by today's date so they automatically reset each new day.
+function getTodayKey() {
+  return `processedIds_${new Date().toISOString().slice(0, 10)}`; // e.g. processedIds_2026-06-10
+}
+
+async function loadProcessedIds(store) {
+  const key = getTodayKey();
+  const ids = await store.get(key, []);
+  return new Set(ids);
+}
+
+async function saveProcessedIds(store, idSet) {
+  const key = getTodayKey();
+  await store.set(key, [...idSet]);
+  await store.pruneProcessedIds(key);
+}
+
+function findChromePath() {
+  const paths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/usr/bin/google-chrome',
+    '/usr/bin/microsoft-edge',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser'
+  ];
+
+  for (const p of paths) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return null;
+}
+
+async function fetchSubredditNewPosts(subreddit) {
+  const chromePath = findChromePath();
+  if (!chromePath) {
+    return { success: false, error: 'No Google Chrome or Microsoft Edge executable found on the system.', data: [] };
+  }
+
+  let browser;
+  try {
+    browser = await puppeteer.launch({
+      executablePath: chromePath,
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+    // Load the HTML subreddit landing page first to pass WAF/Cloudflare and establish session cookies
+    await page.goto(`https://www.reddit.com/r/${subreddit}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+    // Wait a short duration for WAF cookies to stabilize
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Fetch the public JSON endpoint from the console context of this page to bypass security blocks
+    const children = await page.evaluate(async (sub) => {
+      const res = await fetch(`https://www.reddit.com/r/${sub}/new.json?limit=10`);
+      if (!res.ok) {
+        throw new Error(`Reddit API status ${res.status}`);
+      }
+      const json = await res.json();
+      return json.data.children.map(post => post.data);
+    }, subreddit);
+
+    return { success: true, data: children };
+  } catch (error) {
+    return { success: false, error: error.message, data: [] };
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
+async function analyzePostContext(title, description, settings) {
+  try {
+    if (!settings.geminiKey) return 'SKIP';
+
+    const genAI = new GoogleGenerativeAI(settings.geminiKey);
+    const modelName = settings.geminiModel || 'gemini-3.1-flash-lite';
+    const model = genAI.getGenerativeModel({ model: modelName });
+
+    const profileName = settings.masterProfile
+      ? settings.masterProfile.split('\n')[0].replace('Name: ', '')
+      : 'Rahul Goswami';
+
+    const getEvaluatePostPrompt = require('./prompts/evaluatePostPrompt');
+    const prompt = getEvaluatePostPrompt({
+      profileName,
+      masterProfile: settings.masterProfile,
+      title,
+      description,
+      customDmPrompt: settings.dmPrompt
+    });
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+
+    // Parse JSON
+    try {
+      // Remove any markdown block syntax if the model accidentally included it
+      const cleanText = text.replace(/^```json/i, '').replace(/```$/i, '').trim();
+      const parsed = JSON.parse(cleanText);
+      if (parsed.skip) return 'SKIP';
+      if (parsed.dmMessage && parsed.replyMessage) {
+        return parsed;
+      }
+      return 'SKIP';
+    } catch (e) {
+      console.error('Failed to parse Gemini JSON:', text);
+      return 'SKIP';
+    }
+  } catch (error) {
+    console.error('Gemini processing exception:', error);
+    return 'SKIP';
+  }
+}
+
+async function runScrapeCycle(settings, store, onMatchFound, onMatchRejected, onMatchSkipped, onLog) {
+  // Load today's processed IDs from persistent storage
+  const processedPostIds = await loadProcessedIds(store);
+
+  onLog(`Checking communities: ${settings.subreddits}`);
+  const subs = settings.subreddits.split(',').map(s => s.trim()).filter(Boolean);
+
+  for (let i = 0; i < subs.length; i++) {
+    const subreddit = subs[i];
+    const { success, error, data } = await fetchSubredditNewPosts(subreddit);
+
+    if (!success) {
+      onLog(`Failed to pull r/${subreddit}: ${error}`, 'error');
+      continue;
+    }
+
+    for (const post of data) {
+      if (!post.selftext) {
+        if (onMatchSkipped) onMatchSkipped(post, 'No body text');
+        continue;
+      }
+      if (post.pinned) {
+        if (onMatchSkipped) onMatchSkipped(post, 'Pinned post');
+        continue;
+      }
+      if (processedPostIds.has(post.id)) {
+        if (onMatchSkipped) onMatchSkipped(post, 'Already processed today');
+        continue;
+      }
+
+      // Filter outdated
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      if (post.created_utc * 1000 < startOfToday.getTime()) {
+        appendToLogFile(`Skipped (Outdated/Not Today): [${subreddit}] ${post.title}`);
+        if (onMatchSkipped) onMatchSkipped(post, 'Older than today');
+        continue;
+      }
+
+      appendToLogFile(`Evaluating New Post: [${subreddit}] ${post.title} (URL: https://reddit.com${post.permalink})`);
+
+      processedPostIds.add(post.id);
+      // Persist immediately so a crash/restart doesn't re-process this ID
+      await saveProcessedIds(store, processedPostIds);
+
+      const decision = await analyzePostContext(post.title, post.selftext, settings);
+
+      if (decision !== 'SKIP') {
+        appendToLogFile(`--> MATCH: Lead Confirmed!`);
+        onLog(`🔥 Match confirmed for post ID: ${post.id}`, 'success');
+        if (onMatchFound) await onMatchFound(post, decision);
+      } else {
+        appendToLogFile(`--> SKIP: Gemini rejected the post as not a fit.`);
+        if (onMatchRejected) await onMatchRejected(post);
+      }
+
+      // Throttle: Max 1 request per minute to Gemini API
+      if (settings.geminiKey) {
+        onLog(`Throttling Gemini API: Waiting 60 seconds before processing next potential lead...`);
+        await new Promise(resolve => setTimeout(resolve, 60000));
+      }
+    }
+
+    // Delay 2 minutes between subreddits (unless it's the last one)
+    if (i < subs.length - 1) {
+      onLog(`Waiting 2 minutes before scraping the next subreddit...`, 'info');
+      await new Promise(resolve => setTimeout(resolve, 120000)); // 2 minutes delay is 120000ms
+    }
+  }
+}
+
+async function forceGeneratePitch(title, description, settings) {
+  try {
+    if (!settings.geminiKey) throw new Error('Missing Gemini Key');
+
+    const genAI = new GoogleGenerativeAI(settings.geminiKey);
+    const modelName = settings.geminiModel || 'gemini-3.1-flash-lite';
+    const model = genAI.getGenerativeModel({ model: modelName });
+
+    const profileName = settings.masterProfile
+      ? settings.masterProfile.split('\n')[0].replace('Name: ', '')
+      : 'Rahul Goswami';
+
+    const getGeneratePitchPrompt = require('./prompts/generatePitchPrompt');
+    const prompt = getGeneratePitchPrompt({
+      profileName,
+      masterProfile: settings.masterProfile,
+      title,
+      description,
+      customDmPrompt: settings.dmPrompt
+    });
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+
+    const cleanText = text.replace(/^```json/i, '').replace(/```$/i, '').trim();
+    const parsed = JSON.parse(cleanText);
+    return parsed;
+  } catch (error) {
+    console.error('Gemini processing exception:', error);
+    throw error;
+  }
+}
+
+module.exports = {
+  runScrapeCycle,
+  forceGeneratePitch
+};

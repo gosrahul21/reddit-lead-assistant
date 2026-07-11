@@ -1,0 +1,20 @@
+{
+  "name": "reddit-lead-assistant-worker",
+  "version": "1.0.0",
+  "description": "24/7 background worker for Reddit Lead Assistant",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js",
+    "test-scrape": "node test_scrape.js"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@upstash/redis": "^1.38.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "node-cron": "^4.2.1",
+    "puppeteer-core": "^25.3.0"
+  }
+}
