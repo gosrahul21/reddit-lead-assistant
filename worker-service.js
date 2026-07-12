@@ -9,8 +9,14 @@ class WorkerService {
     this.isCycleActive = false;
   }
 
+  getCurrentIstHour() {
+    const now = new Date();
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    return istTime.getUTCHours();
+  }
+
   isWithinActiveWindow(settings) {
-    const currentHour = new Date().getHours();
+    const currentHour = this.getCurrentIstHour();
     const startH = Number(settings.runStartHour);
     const endH = Number(settings.runEndHour);
 
@@ -28,7 +34,7 @@ class WorkerService {
     const settings = await this.store.getAllSettings();
     
     if (!this.isWithinActiveWindow(settings)) {
-      this.logger.info(`[IDLE MODE] Current hour (${new Date().getHours()}:00) is OUTSIDE the configured run window (${settings.runStartHour}:00 - ${settings.runEndHour}:00). Skipping scrape.`);
+      this.logger.info(`[IDLE MODE] Current hour (${this.getCurrentIstHour()}:00 IST) is OUTSIDE the configured run window (${settings.runStartHour}:00 - ${settings.runEndHour}:00 IST). Skipping scrape.`);
       return;
     }
 
