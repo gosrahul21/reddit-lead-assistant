@@ -46,7 +46,7 @@ module.exports = function getEvaluatePostPrompt({ profileName, masterProfile, ti
       Body/Description: ${description}
 
       CRITICAL INSTRUCTIONS:
-      1. If this post is NOT someone explicitly looking to hire/contract a developer, reply ONLY with JSON: {"skip": true}
+      1. If this post is NOT someone explicitly looking to hire/contract a developer, or post title contains [FOR HIRE], reply ONLY with JSON: {"skip": true}
       2. If it is a strong fit, reply with a JSON object containing "dmMessage" and "replyMessage".
 
       For "dmMessage":
