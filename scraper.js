@@ -85,6 +85,12 @@ async function analyzePostContext(title, description, settings) {
       ? settings.masterProfile.split('\n')[0].replace('Name: ', '')
       : 'Rahul Goswami';
 
+    // if title start with "[FOR HIRE]" then SKIP
+    if (title.toUpperCase().includes('[FOR HIRE]')) {
+      console.log('Skipping post: title contains [FOR HIRE]');
+      return 'SKIP';
+    }
+
     const getEvaluatePostPrompt = require('./prompts/evaluatePostPrompt');
     const prompt = getEvaluatePostPrompt({
       profileName,
@@ -94,6 +100,7 @@ async function analyzePostContext(title, description, settings) {
       customDmPrompt: settings.dmPrompt
     });
 
+    // MAKING LLM CALL
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
 

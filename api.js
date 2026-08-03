@@ -1,35 +1,13 @@
+const express = require('express');
+const cors = require('cors');
 const dotenv = require('dotenv');
-const cron = require('node-cron');
 const store = require('./store-instance');
-const config = require('./config');
-const HistoryManager = require('./history-manager');
-const WorkerService = require('./worker-service');
-const Logger = require('./logger');
+const { forceGeneratePitch } = require('./scraper');
 
-// Load environment variables
 dotenv.config();
 
-const logger = new Logger();
-const historyManager = new HistoryManager(store);
-const workerService = new WorkerService(store, historyManager, logger);
-
-// Fire an initial execution immediately on launch
-workerService.runSafe();
-
-cron.schedule(config.SCRAPE_CRON_SCHEDULE, () => {
-  const randomDelayMs = Math.floor(Math.random() * config.MAX_CRON_DELAY_MS);
-  logger.info(`[CRON] Scheduled cycle triggered. Delaying start by ${Math.round(randomDelayMs / 1000)} seconds to randomize timing...`);
-  
-  setTimeout(() => {
-    workerService.runSafe();
-  }, randomDelayMs);
-});
-
-// --------------------------------------------------------------------
-// Start API Server
-// --------------------------------------------------------------------
 const app = express();
-app.use(cors(['http://localhost:5173', 'https://leadplay.addsubtitles.info']));
+app.use(cors());
 app.use(express.json());
 
 app.get("/health", async (req, res) => {
@@ -40,19 +18,10 @@ app.get("/health", async (req, res) => {
 });
 
 app.get('/api/posts', async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
-  const start = (page - 1) * limit;
-  const end = start + limit;
-
-  const allPosts = await store.get('allPosts', []);
-  const matchedPosts = await store.get('matchedPosts', []);
-  const rejectedPosts = await store.get('rejectedPosts', []);
-
   res.json({
-    all: { data: allPosts.slice(start, end), total: allPosts.length },
-    matched: { data: matchedPosts.slice(start, end), total: matchedPosts.length },
-    rejected: { data: rejectedPosts.slice(start, end), total: rejectedPosts.length }
+    all: await store.get('allPosts', []),
+    matched: await store.get('matchedPosts', []),
+    rejected: await store.get('rejectedPosts', [])
   });
 });
 
