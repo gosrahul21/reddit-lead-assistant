@@ -143,7 +143,7 @@ cron.schedule(config.SCRAPE_CRON_SCHEDULE, () => {
 // API Server for UI
 // --------------------------------------------------------------------
 const app = express();
-app.use(cors());
+app.use(cors(['http://localhost:5173', 'https://leadplay.addsubtitles.info']));
 app.use(express.json());
 
 app.get("/health", async (req, res) => {
@@ -154,10 +154,19 @@ app.get("/health", async (req, res) => {
 });
 
 app.get('/api/posts', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const start = (page - 1) * limit;
+  const end = start + limit;
+
+  const allPosts = await store.get('allPosts', []);
+  const matchedPosts = await store.get('matchedPosts', []);
+  const rejectedPosts = await store.get('rejectedPosts', []);
+
   res.json({
-    all: await store.get('allPosts', []),
-    matched: await store.get('matchedPosts', []),
-    rejected: await store.get('rejectedPosts', [])
+    all: { data: allPosts.slice(start, end), total: allPosts.length },
+    matched: { data: matchedPosts.slice(start, end), total: matchedPosts.length },
+    rejected: { data: rejectedPosts.slice(start, end), total: rejectedPosts.length }
   });
 });
 

@@ -8,12 +8,18 @@ class Store {
       token: process.env.UPSTASH_REDIS_REST_TOKEN,
     });
     this.namespace = 'rla:'; // Prefix keys to avoid collisions
+    this.cache = new Map(); // In-memory cache
   }
 
   async get(key, defaultValue) {
+    if (this.cache.has(key)) {
+      return this.cache.get(key);
+    }
+
     try {
       const data = await this.redis.get(this.namespace + key);
       if (data !== null && data !== undefined) {
+        this.cache.set(key, data);
         return data;
       }
     } catch (e) {
@@ -27,9 +33,11 @@ class Store {
       if (typeof key === 'object' && key !== null) {
         // Bulk set
         for (const [k, v] of Object.entries(key)) {
+          this.cache.set(k, v);
           await this.redis.set(this.namespace + k, v);
         }
       } else {
+        this.cache.set(key, value);
         await this.redis.set(this.namespace + key, value);
       }
     } catch (e) {
@@ -39,6 +47,7 @@ class Store {
 
   async delete(key) {
     try {
+      this.cache.delete(key);
       await this.redis.del(this.namespace + key);
     } catch (e) {
       console.error('Redis DEL Error:', e);
