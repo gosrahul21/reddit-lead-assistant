@@ -5,6 +5,8 @@ const config = require('./config');
 const HistoryManager = require('./history-manager');
 const WorkerService = require('./worker-service');
 const Logger = require('./logger');
+const express = require('express');
+const cors = require('cors');
 
 // Load environment variables
 dotenv.config();
