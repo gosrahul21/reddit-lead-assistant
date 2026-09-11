@@ -42,6 +42,11 @@ class WorkerService {
     this.logger.info(`[${new Date().toLocaleTimeString()}] Starting scrape cycle...`);
 
     try {
+      const pruneResult = await this.historyManager.prune72HourOldData();
+      if (pruneResult.prunedCount > 0) {
+        this.logger.info(`[PRUNE] Cleaned up ${pruneResult.prunedCount} posts older than 72 hours. Active stored posts: ${pruneResult.remainingPosts}`);
+      }
+
       const bot = new TelegramBot(settings.telegramToken, settings.telegramChatId);
 
       this.logger.info('----------------------------------------------------');
@@ -73,7 +78,6 @@ class WorkerService {
     const pitch = typeof decisionObj === 'object' ? decisionObj.dmMessage : decisionObj;
     const replyMessage = typeof decisionObj === 'object' ? decisionObj.replyMessage : settings.commentPrompt;
 
-    await this.historyManager.save('allPosts', post);
     await this.historyManager.save('matchedPosts', post, pitch, replyMessage);
 
     if (settings.useTelegram) {
@@ -85,7 +89,6 @@ class WorkerService {
 
   async handleRejection(post) {
     this.logger.info(`[REJECTED] Fit rejected by Gemini: r/${post.subreddit} - "${post.title}"`);
-    await this.historyManager.save('allPosts', post);
     await this.historyManager.save('rejectedPosts', post);
   }
 }

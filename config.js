@@ -39,4 +39,11 @@ module.exports = {
 
   // Time to wait on the page for Cloudflare/WAF cookies to stabilize before fetching JSON
   WAF_STABILIZATION_DELAY_MS: 3000, 
+
+  // ==========================================
+  // History & Storage Retention
+  // ==========================================
+
+  // How long to keep posts in Redis before automatic cleanup (in hours)
+  HISTORY_RETENTION_HOURS: 72,
 };

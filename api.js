@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const store = require('./store-instance');
+const HistoryManager = require('./history-manager');
 const { forceGeneratePitch } = require('./scraper');
 
 dotenv.config();
@@ -9,6 +10,8 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const historyManager = new HistoryManager(store);
 
 app.get("/health", async (req, res) => {
   res.send({
@@ -18,11 +21,15 @@ app.get("/health", async (req, res) => {
 });
 
 app.get('/api/posts', async (req, res) => {
-  res.json({
-    all: await store.get('allPosts', []),
-    matched: await store.get('matchedPosts', []),
-    rejected: await store.get('rejectedPosts', [])
-  });
+  const limit = req.query.limit ? parseInt(req.query.limit, 10) : null;
+  const posts = await historyManager.getPosts(limit);
+  res.json(posts);
+});
+
+app.post('/api/posts/cleanup', async (req, res) => {
+  const retentionHours = req.body.retentionHours ? parseInt(req.body.retentionHours, 10) : undefined;
+  const result = await historyManager.prune72HourOldData(retentionHours);
+  res.json({ success: true, ...result });
 });
 
 app.get('/api/settings', async (req, res) => {
@@ -48,11 +55,10 @@ app.post('/api/generate-pitch', async (req, res) => {
   const { postId } = req.body;
   if (!postId) return res.status(400).json({ error: 'postId is required' });
 
-  const rejected = await store.get('rejectedPosts', []);
-  const post = rejected.find(p => p.id === postId);
+  const post = await historyManager.getPostById(postId);
 
   if (!post) {
-    return res.status(404).json({ error: 'Post not found in rejected list' });
+    return res.status(404).json({ error: 'Post not found' });
   }
 
   try {

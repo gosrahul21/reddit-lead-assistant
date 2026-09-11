@@ -1,7 +1,5 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const puppeteer = require('puppeteer');
-const fs = require('fs');
-const path = require('path');
 const config = require('./config');
 
 function appendToLogFile(msg) {
@@ -15,21 +13,14 @@ function appendToLogFile(msg) {
 }
 
 // ── Persistent processed-ID cache ────────────────────────────────────────────
-// IDs are keyed by today's date so they automatically reset each new day.
-function getTodayKey() {
-  return `processedIds_${new Date().toISOString().slice(0, 10)}`; // e.g. processedIds_2026-06-10
-}
-
 async function loadProcessedIds(store) {
-  const key = getTodayKey();
-  const ids = await store.get(key, []);
-  return new Set(ids);
+  const matched = await store.get('matchedPostIds', []);
+  const rejected = await store.get('rejectedPostIds', []);
+  return new Set([...matched, ...rejected]);
 }
 
 async function saveProcessedIds(store, idSet) {
-  const key = getTodayKey();
-  await store.set(key, [...idSet]);
-  await store.pruneProcessedIds(key);
+  // Processing state is maintained via historyManager save operations
 }
 
 
@@ -150,24 +141,21 @@ async function runScrapeCycle(settings, store, onMatchFound, onMatchRejected, on
         continue;
       }
       if (processedPostIds.has(post.id)) {
-        if (onMatchSkipped) onMatchSkipped(post, 'Already processed today');
+        if (onMatchSkipped) onMatchSkipped(post, 'Already processed in 72h window');
         continue;
       }
 
-      // Filter outdated
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      if (post.created_utc * 1000 < startOfToday.getTime()) {
-        appendToLogFile(`Skipped (Outdated/Not Today): [${subreddit}] ${post.title}`);
-        if (onMatchSkipped) onMatchSkipped(post, 'Older than today');
+      // Filter outdated posts (older than retention window)
+      const retentionCutoffMs = Date.now() - ((config.HISTORY_RETENTION_HOURS || 72) * 60 * 60 * 1000);
+      if (post.created_utc * 1000 < retentionCutoffMs) {
+        appendToLogFile(`Skipped (Older than ${config.HISTORY_RETENTION_HOURS || 72}h): [${subreddit}] ${post.title}`);
+        if (onMatchSkipped) onMatchSkipped(post, `Older than ${config.HISTORY_RETENTION_HOURS || 72} hours`);
         continue;
       }
 
       appendToLogFile(`Evaluating New Post: [${subreddit}] ${post.title} (URL: https://reddit.com${post.permalink})`);
 
       processedPostIds.add(post.id);
-      // Persist immediately so a crash/restart doesn't re-process this ID
-      await saveProcessedIds(store, processedPostIds);
 
       const decision = await analyzePostContext(post.title, post.selftext, settings);
 
