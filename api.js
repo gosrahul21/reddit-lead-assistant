@@ -72,6 +72,10 @@ app.post('/api/generate-pitch', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`API Server listening on port ${PORT}`);
-});
+if (!process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  app.listen(PORT, () => {
+    console.log(`API Server listening on port ${PORT}`);
+  });
+}
+
+module.exports = app;

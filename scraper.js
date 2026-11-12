@@ -1,5 +1,4 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const puppeteer = require('puppeteer');
 const config = require('./config');
 
 function appendToLogFile(msg) {
@@ -25,15 +24,41 @@ async function saveProcessedIds(store, idSet) {
 
 
 
+async function launchBrowser() {
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    try {
+      const chromiumModule = require('@sparticuz/chromium');
+      const chromium = chromiumModule.default || chromiumModule;
+      const puppeteerCore = require('puppeteer-core');
+      return await puppeteerCore.launch({
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+      });
+    } catch (err) {
+      // Fallback for Docker container on Lambda
+      return await puppeteer.launch({
+        headless: true,
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+      });
+    }
+  }
+
+  // Local development
+  const puppeteerModule = await import('puppeteer');
+  const puppeteer = puppeteerModule.default || puppeteerModule;
+  return await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+}
+
 async function fetchSubredditNewPosts(subreddit) {
   let browser;
   try {
-    const launchOptions = {
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    };
-    
-    browser = await puppeteer.launch(launchOptions);
+    browser = await launchBrowser();
 
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');

@@ -9,7 +9,9 @@
   },
   "type": "commonjs",
   "dependencies": {
+    "@codegenie/serverless-express": "^5.0.0",
     "@google/generative-ai": "^0.24.1",
+    "@sparticuz/chromium": "^153.0.0",
     "@upstash/redis": "^1.38.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -17,6 +19,7 @@
     "imapflow": "^1.7.6",
     "mailparser": "^3.9.16",
     "node-cron": "^4.2.1",
-    "puppeteer": "^25.3.0"
+    "puppeteer": "^25.3.0",
+    "puppeteer-core": "^25.17.0"
   }
 }
