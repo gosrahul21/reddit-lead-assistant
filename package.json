@@ -9,7 +9,7 @@
   },
   "type": "commonjs",
   "dependencies": {
-    "@codegenie/serverless-express": "^5.0.0",
+    "@codegenie/serverless-express": "4.15.0",
     "@google/generative-ai": "^0.24.1",
     "@sparticuz/chromium": "^153.0.0",
     "@upstash/redis": "^1.38.0",

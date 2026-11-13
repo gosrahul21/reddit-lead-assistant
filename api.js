@@ -13,6 +13,14 @@ app.use(express.json());
 
 const historyManager = new HistoryManager(store);
 
+app.get("/", async (req, res) => {
+  res.json({
+    name: "reddit-lead-assistant-api",
+    status: "OK",
+    endpoints: ["/health", "/api/posts", "/api/settings", "/api/generate-pitch"]
+  });
+});
+
 app.get("/health", async (req, res) => {
   res.send({
     success: true,
@@ -69,6 +77,21 @@ app.post('/api/generate-pitch', async (req, res) => {
     console.error('API /generate-pitch error:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// 404 fallback handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Route not found',
+    method: req.method,
+    path: req.originalUrl || req.url
+  });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled API Error:', err);
+  res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
 const PORT = process.env.PORT || 3001;
