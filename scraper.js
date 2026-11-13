@@ -67,23 +67,59 @@ async function fetchSubredditNewPosts(subreddit) {
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    // Load the HTML subreddit landing page first to pass WAF/Cloudflare and establish session cookies
-    await page.goto(`https://www.reddit.com/r/${subreddit}`, { waitUntil: 'domcontentloaded', timeout: config.PAGE_LOAD_TIMEOUT_MS });
+    // Navigate directly to the subreddit's new posts page
+    await page.goto(`https://www.reddit.com/r/${subreddit}/new`, { waitUntil: 'networkidle2', timeout: config.PAGE_LOAD_TIMEOUT_MS });
 
-    // Wait a short duration for WAF cookies to stabilize
-    await new Promise(resolve => setTimeout(resolve, config.WAF_STABILIZATION_DELAY_MS));
+    // Scroll slightly to trigger hydration of post elements
+    await page.evaluate(() => window.scrollBy(0, 1000));
+    await new Promise(resolve => setTimeout(resolve, config.WAF_STABILIZATION_DELAY_MS || 1500));
 
-    // Fetch the public JSON endpoint from the console context of this page to bypass security blocks
-    const children = await page.evaluate(async (sub) => {
-      const res = await fetch(`https://www.reddit.com/r/${sub}/new.json?limit=10`);
-      if (!res.ok) {
-        throw new Error(`Reddit API status ${res.status}`);
+    // Extract posts directly from the rendered DOM (bypasses Reddit's 403 on unauthenticated .json endpoints)
+    const posts = await page.evaluate((sub) => {
+      const shredditPosts = Array.from(document.querySelectorAll('shreddit-post'));
+      if (shredditPosts.length > 0) {
+        return shredditPosts.slice(0, 15).map(el => {
+          const bodyEl = el.querySelector('[slot="text-body"], .md, div[id*="post-rtjson-content"]');
+          const timestamp = el.getAttribute('created-timestamp');
+          const permalink = el.getAttribute('permalink') || '';
+          return {
+            id: (el.getAttribute('id') || '').replace(/^t3_/, ''),
+            title: el.getAttribute('post-title') || '',
+            selftext: bodyEl ? bodyEl.innerText.trim() : '',
+            author: el.getAttribute('author') || '',
+            permalink: permalink,
+            url: el.getAttribute('content-href') || ('https://www.reddit.com' + permalink),
+            subreddit: el.getAttribute('subreddit-prefixed-name')?.replace(/^r\//, '') || el.getAttribute('subreddit-name') || sub,
+            pinned: el.hasAttribute('pinned') || el.classList.contains('pinned'),
+            created_utc: timestamp ? Math.floor(new Date(timestamp).getTime() / 1000) : Math.floor(Date.now() / 1000)
+          };
+        });
       }
-      const json = await res.json();
-      return json.data.children.map(post => post.data);
+
+      // Legacy fallback (old.reddit style if served)
+      const legacyPosts = Array.from(document.querySelectorAll('div.thing'));
+      if (legacyPosts.length > 0) {
+        return legacyPosts.slice(0, 15).map(el => {
+          const titleEl = el.querySelector('a.title');
+          const bodyEl = el.querySelector('div.usertext-body');
+          return {
+            id: (el.getAttribute('data-fullname') || '').replace(/^t3_/, ''),
+            title: titleEl ? titleEl.innerText.trim() : '',
+            selftext: bodyEl ? bodyEl.innerText.trim() : '',
+            author: el.getAttribute('data-author') || '',
+            permalink: el.getAttribute('data-permalink') || '',
+            url: el.getAttribute('data-url') || '',
+            subreddit: el.getAttribute('data-subreddit') || sub,
+            pinned: el.classList.contains('stickied'),
+            created_utc: Number(el.getAttribute('data-timestamp') || Date.now()) / 1000
+          };
+        });
+      }
+
+      return [];
     }, subreddit);
 
-    return { success: true, data: children };
+    return { success: true, data: posts };
   } catch (error) {
     return { success: false, error: error.message, data: [] };
   } finally {
