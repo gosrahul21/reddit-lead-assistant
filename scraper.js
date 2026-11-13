@@ -27,9 +27,10 @@ async function saveProcessedIds(store, idSet) {
 async function launchBrowser() {
   if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
     try {
-      const chromiumModule = require('@sparticuz/chromium');
+      const chromiumModule = await import('@sparticuz/chromium');
       const chromium = chromiumModule.default || chromiumModule;
-      const puppeteerCore = require('puppeteer-core');
+      const puppeteerCoreModule = await import('puppeteer-core');
+      const puppeteerCore = puppeteerCoreModule.default || puppeteerCoreModule;
       return await puppeteerCore.launch({
         args: chromium.args,
         defaultViewport: chromium.defaultViewport,
@@ -37,7 +38,10 @@ async function launchBrowser() {
         headless: chromium.headless,
       });
     } catch (err) {
+      console.error('[LAMBDA] Sparticuz Chromium launch failed, attempting Puppeteer fallback:', err);
       // Fallback for Docker container on Lambda
+      const puppeteerModule = await import('puppeteer');
+      const puppeteer = puppeteerModule.default || puppeteerModule;
       return await puppeteer.launch({
         headless: true,
         executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
