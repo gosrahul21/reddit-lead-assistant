@@ -22,13 +22,12 @@ module.exports = {
   // ==========================================
 
   // Delay between scanning different subreddits in the same cycle (in milliseconds)
-  // Default: 120000 (2 minutes)
-  DELAY_BETWEEN_SUBREDDITS_MS: 120000, 
+  // Set to 5000 (5s) so multi-subreddit cycles complete comfortably within Lambda execution limits
+  DELAY_BETWEEN_SUBREDDITS_MS: 5000, 
 
   // Delay between Gemini API calls to evaluate individual posts (in milliseconds)
-  // This prevents hitting the free-tier rate limit of Gemini APIs.
-  // Default: 60000 (60 seconds)
-  DELAY_BETWEEN_POST_EVALUATIONS_MS: 60000, 
+  // 5000 (5s) easily respects the Gemini free-tier rate limit (15 RPM)
+  DELAY_BETWEEN_POST_EVALUATIONS_MS: 5000, 
 
   // ==========================================
   // Browser & Network Timeouts

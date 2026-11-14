@@ -26,6 +26,15 @@ class TelegramBot {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`Telegram API error: ${response.status} - ${errorText}`);
+        // If Markdown formatting failed, retry sending as plain text so notification is not lost
+        if (response.status === 400 && payload.parse_mode) {
+          delete payload.parse_mode;
+          await fetch(`${this.apiUrl}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
       }
     } catch (e) {
       console.error('Telegram Send Error:', e);

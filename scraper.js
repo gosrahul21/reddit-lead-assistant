@@ -196,6 +196,8 @@ async function runScrapeCycle(settings, store, onMatchFound, onMatchRejected, on
       continue;
     }
 
+    onLog(`[${subreddit}] Found ${data ? data.length : 0} posts on page.`);
+
     for (const post of data) {
       if (!post.selftext) {
         if (onMatchSkipped) onMatchSkipped(post, 'No body text');

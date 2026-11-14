@@ -52,7 +52,7 @@ class WorkerService {
       this.logger.info('----------------------------------------------------');
       this.logger.info('Reddit Lead Assistant 24/7 Backend Worker Cycle');
       this.logger.info('Monitoring Subreddits: ' + settings.subreddits);
-      this.logger.info('Telegram Notifications: ' + (settings.useTelegram ? 'ENABLED' : 'DISABLED'));
+      this.logger.info('Telegram Notifications: ' + (settings.useTelegram ? 'ENABLED' : 'DISABLED') + (settings.telegramToken ? ` (Bot token: ...${settings.telegramToken.slice(-4)} | Chat: ${settings.telegramChatId})` : ' (Token MISSING)'));
       this.logger.info('Gemini Model: ' + settings.geminiModel);
       this.logger.info('----------------------------------------------------');
 
@@ -61,7 +61,7 @@ class WorkerService {
         this.store,
         (post, decisionObj) => this.handleMatch(post, decisionObj, settings, bot),
         (post) => this.handleRejection(post),
-        (post, reason) => { /* Post skipped */ },
+        (post, reason) => this.logger.info(`[SKIPPED] r/${post.subreddit} "${post.title ? post.title.slice(0, 45) : post.id}..." -> ${reason}`),
         (msg, type) => this.logger.log(type, msg)
       );
     } catch (error) {
